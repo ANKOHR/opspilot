@@ -132,7 +132,19 @@ class Repository:
         with self.session_factory() as db:
             org = db.get(OrganizationModel, "demo-org")
             if org is None:
-                db.add(OrganizationModel(id="demo-org", name="Northstar Demo Organisation"))
+                org = OrganizationModel(id="demo-org", name="Northstar Demo Organisation")
+                db.add(org)
+                # PostgreSQL enforces the organisation FK immediately. Flush
+                # the parent before adding the first membership row so startup
+                # behaves the same on SQLite and production Postgres.
+                db.flush()
+            member = db.scalar(
+                select(OrganizationMemberModel).where(
+                    OrganizationMemberModel.organisation_id == org.id,
+                    OrganizationMemberModel.user_id == "demo-operator",
+                )
+            )
+            if member is None:
                 db.add(
                     OrganizationMemberModel(
                         organisation_id="demo-org", user_id="demo-operator", role="operator"
