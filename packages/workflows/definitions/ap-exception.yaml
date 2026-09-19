@@ -1,0 +1,22 @@
+id: ap-exception
+name: Accounts Payable Exception Agent
+version: 1
+trigger: invoice.received
+steps:
+  - id: extract
+    kind: llm.structured
+    schema: Invoice
+  - id: validate
+    kind: deterministic.validate
+    action_class: read
+  - id: duplicate
+    kind: deterministic.duplicate_check
+    action_class: read
+  - id: approval_rules
+    kind: deterministic.approval_rules
+    action_class: write
+  - id: route
+    kind: human.approval
+    action_class: external
+    requires_approval: true
+

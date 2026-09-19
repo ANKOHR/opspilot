@@ -1,0 +1,38 @@
+id: inbound-revenue
+name: Inbound Revenue Agent
+version: 1
+trigger: gmail.email_received
+steps:
+  - id: extract
+    kind: llm.structured
+    schema: LeadQualificationOutput
+  - id: crm_lookup
+    kind: crm.search_company
+    action_class: read
+  - id: enrich
+    kind: web.company_lookup
+    action_class: read
+  - id: score
+    kind: deterministic.score
+    action_class: write
+  - id: calendar
+    kind: calendar.find_availability
+    action_class: read
+  - id: draft
+    kind: gmail.create_draft
+    action_class: write
+  - id: approval
+    kind: human.approval
+    action_class: external
+    requires_approval: true
+  - id: send
+    kind: gmail.send
+    action_class: external
+    requires_approval: true
+  - id: deal
+    kind: crm.create_deal
+    action_class: write
+  - id: follow_up
+    kind: tasks.create_follow_up
+    action_class: write
+

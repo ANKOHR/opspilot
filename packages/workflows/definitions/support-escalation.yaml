@@ -1,0 +1,19 @@
+id: support-escalation
+name: Support Escalation Agent
+version: 1
+trigger: support.ticket_created
+steps:
+  - id: classify
+    kind: llm.structured
+    schema: SupportClassification
+  - id: retrieve
+    kind: support.lookup
+    action_class: read
+  - id: draft
+    kind: llm.structured
+    schema: SupportReply
+  - id: route
+    kind: human.approval
+    action_class: external
+    requires_approval: true
+

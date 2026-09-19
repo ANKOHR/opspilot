@@ -1,0 +1,13 @@
+import Link from "next/link";
+
+import { AppShell } from "../../../components/app-shell";
+import { Icon } from "../../../components/icons";
+import { workflows } from "../../../lib/demo-data";
+import { Button, PageIntro, SectionTitle, StatusPill } from "../../../components/ui";
+
+export default async function WorkflowDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const workflow = workflows.find((item) => item.id === id) ?? workflows[0];
+  return <AppShell><PageIntro eyebrow="Workflow definition · v1" title={workflow.name} description={workflow.description} action={<div className="button-row"><Button variant="secondary" icon="edit">Edit definition</Button><Button icon="play">Run test event</Button></div>} /><div className="detail-grid"><section className="panel workflow-canvas"><SectionTitle title="Execution graph" subtitle={`${workflow.steps.length} steps · trigger: ${workflow.trigger}`} /><div className="graph"><div className="graph-trigger"><span className="graph-node-icon"><Icon name="inbox" size={16} /></span><div><strong>Event received</strong><span>{workflow.trigger}</span></div></div>{workflow.steps.map((step, index) => <div className="graph-step-wrap" key={step.id}><div className={`graph-connector ${step.state}`} /><div className={`graph-step ${step.state}`}><div className="graph-step-index">{String(index + 1).padStart(2, "0")}</div><div className="graph-step-main"><strong>{step.label}</strong><span>{step.kind}</span></div><StatusPill status={step.state === "approval" ? "Approval" : step.state === "complete" ? "Completed" : "Next"} /></div></div>)}</div></section><aside className="detail-side"><section className="panel"><SectionTitle title="Definition" /><div className="code-card"><div><span>trigger</span><strong>{workflow.trigger}</strong></div><div><span>version</span><strong>v1 · immutable</strong></div><div><span>retry policy</span><strong>3 attempts · backoff</strong></div><div><span>approval policy</span><strong>External actions</strong></div></div><Link className="text-link code-link" href="/settings">View YAML definition <Icon name="arrow" size={14} /></Link></section><section className="panel"><SectionTitle title="Performance" /><div className="performance-stat"><strong>{workflow.success}</strong><span>success rate</span></div><div className="mini-stat-row"><span>Runs this month</span><strong>{workflow.runs}</strong></div><div className="mini-stat-row"><span>Median runtime</span><strong>7.8s</strong></div><div className="mini-stat-row"><span>Approval rate</span><strong>91.4%</strong></div></section></aside></div></AppShell>;
+}
+

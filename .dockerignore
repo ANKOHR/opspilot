@@ -1,0 +1,15 @@
+.git
+.venv
+node_modules
+**/node_modules
+.next
+**/.next
+*.db
+*.sqlite
+*.log
+.pytest_cache
+.ruff_cache
+coverage
+dist
+tsconfig.tsbuildinfo
+**/tsconfig.tsbuildinfo

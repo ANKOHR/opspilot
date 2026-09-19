@@ -1,0 +1,36 @@
+flowchart LR
+    browser[Next.js operations dashboard]
+    api[FastAPI API\norganisation-scoped routes]
+    queue[(Redis queue)]
+    worker[Dramatiq worker\nworkflow runtime]
+    db[(Postgres\nSQLite local mode)]
+    trace[(Runs, traces, approvals,\naudit and usage records)]
+    sandbox[Deterministic sandbox\nLLM + connector adapters]
+    future[Optional live adapters\nOpenAI / Anthropic / Gmail / CRM]
+
+    browser -->|read, approve, replay| api
+    api -->|record event first| db
+    api -->|enqueue long-running work| queue
+    queue --> worker
+    worker -->|load immutable workflow version| db
+    worker -->|typed steps and policy checks| sandbox
+    sandbox -->|structured outputs and simulated actions| worker
+    worker -->|ordered trace + cost + audit| trace
+    trace --> db
+    api -->|run viewer and approval inbox| trace
+    sandbox -. configured separately .-> future
+
+    subgraph EventFlow[Durable event flow]
+        event[Incoming event] --> idempotency[Unique organisation + idempotency key]
+        idempotency --> dispatch[Workflow dispatch]
+        dispatch --> checkpoint[Checkpointed step execution]
+        checkpoint --> approval{External or destructive action?}
+        approval -->|no| continue[Continue automatically]
+        approval -->|yes| wait[WAITING_FOR_APPROVAL]
+        wait --> decision[Approve, edit or reject]
+        decision --> continue
+        continue --> complete[SUCCEEDED / FAILED / REJECTED]
+    end
+
+    api --> event
+    complete --> trace

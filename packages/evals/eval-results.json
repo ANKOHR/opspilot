@@ -1,0 +1,9 @@
+{
+  "dataset_size": 100,
+  "intent_accuracy": 100.0,
+  "fit_band_accuracy": 100.0,
+  "approval_policy_accuracy": 100.0,
+  "schema_compliance": 100.0,
+  "fixture_type": "synthetic_generated",
+  "note": "These are local generated-fixture metrics, not production customer results."
+}

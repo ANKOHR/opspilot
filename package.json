@@ -1,0 +1,12 @@
+{
+  "name": "opspilot",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "pnpm --filter opspilot-web dev",
+    "build": "pnpm --filter opspilot-web build",
+    "lint": "pnpm --filter opspilot-web lint",
+    "typecheck": "pnpm --filter opspilot-web typecheck"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
