@@ -173,7 +173,11 @@ def gmail_messages(
 
 
 @app.post("/api/integrations/gmail/sync")
-def gmail_sync(context: OrganizationContext = Depends(get_context)) -> dict:
+def gmail_sync(
+    query: str = Query(default="-label:processed", max_length=500),
+    max_results: int = Query(default=20, ge=1, le=50),
+    context: OrganizationContext = Depends(get_context),
+) -> dict:
     require_write(context)
     try:
         from .jobs import sync_gmail_job
@@ -182,8 +186,8 @@ def gmail_sync(context: OrganizationContext = Depends(get_context)) -> dict:
             {
                 "organisation_id": context.organization_id,
                 "actor": context.user_id,
-                "query": "-label:processed",
-                "max_results": 20,
+                "query": query,
+                "max_results": max_results,
             }
         )
         repository.add_audit(
