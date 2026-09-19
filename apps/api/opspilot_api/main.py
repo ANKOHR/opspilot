@@ -131,7 +131,7 @@ def gmail_oauth_callback(
         return RedirectResponse(f"{web_url}/integrations?gmail=error", status_code=303)
     try:
         identity = verify_oauth_state(state)
-        credentials = exchange_oauth_code(code)
+        credentials = exchange_oauth_code(code, state)
         connector = GmailConnector.from_credentials(credentials)
         profile = connector.get_profile()
         encrypted = encrypt_refresh_token(str(credentials.refresh_token))

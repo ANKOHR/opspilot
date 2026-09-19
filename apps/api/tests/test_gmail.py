@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import base64
+from types import SimpleNamespace
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from cryptography.fernet import Fernet
 from opspilot_api.gmail import (
     GmailConfigurationError,
+    authorization_url,
     create_oauth_state,
     decrypt_refresh_token,
     encrypt_refresh_token,
@@ -57,6 +60,58 @@ def test_oauth_state_requires_app_secret(monkeypatch):
     monkeypatch.delenv("APP_SECRET", raising=False)
     with pytest.raises(GmailConfigurationError, match="APP_SECRET"):
         create_oauth_state("org-a", "user-a")
+
+
+def test_authorization_url_preserves_signed_state_and_pkce(monkeypatch):
+    monkeypatch.setenv("APP_SECRET", "test-app-secret")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "client-id.apps.googleusercontent.com")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv(
+        "GOOGLE_OAUTH_REDIRECT_URI",
+        "https://api.example.com/api/integrations/gmail/oauth/callback",
+    )
+
+    state = create_oauth_state("org-a", "user-a")
+    query = parse_qs(urlparse(authorization_url(state)).query)
+
+    assert query["state"] == [state]
+    assert query["code_challenge_method"] == ["S256"]
+    assert query["code_challenge"]
+
+
+def test_exchange_oauth_code_reuses_state_bound_pkce_verifier(monkeypatch):
+    monkeypatch.setenv("APP_SECRET", "test-app-secret")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "client-id.apps.googleusercontent.com")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv(
+        "GOOGLE_OAUTH_REDIRECT_URI",
+        "https://api.example.com/api/integrations/gmail/oauth/callback",
+    )
+    state = create_oauth_state("org-a", "user-a")
+    captured: dict[str, object] = {}
+
+    class FakeFlow:
+        credentials = SimpleNamespace(refresh_token="refresh-token", scopes=[])
+
+        def __init__(self):
+            self.redirect_uri = None
+
+        def fetch_token(self, **kwargs):
+            captured.update(kwargs)
+
+    def fake_from_client_config(_config, **kwargs):
+        captured["code_verifier"] = kwargs["code_verifier"]
+        captured["autogenerate_code_verifier"] = kwargs["autogenerate_code_verifier"]
+        return FakeFlow()
+
+    monkeypatch.setattr("opspilot_api.gmail.Flow.from_client_config", fake_from_client_config)
+
+    from opspilot_api.gmail import exchange_oauth_code
+
+    assert exchange_oauth_code("auth-code", state) is not None
+    assert captured["code"] == "auth-code"
+    assert captured["code_verifier"]
+    assert captured["autogenerate_code_verifier"] is False
 
 
 def test_refresh_tokens_are_encrypted(monkeypatch):
