@@ -28,6 +28,8 @@ Last local verification: 2026-09-20.
 | Database migration | Remote migration used Alembic `PostgresqlImpl` | Revision `0001_initial` observed inside the deployed API container |
 | Railway services | API and worker deployments `SUCCESS`; Postgres and Redis `SUCCESS` | Railway project `opspilot`; worker commit `73fb12df021a200d877f74c68e6e22d9d160b472` |
 | Worker footprint | Dramatiq boot log showed two worker processes and a Prometheus fork process | Worker Dockerfile defaults to 2 processes and 4 threads for the trial instance |
+| Vercel frontend | Production deployment `READY` from the monorepo `apps/web` root | [opspilot-web-iota.vercel.app](https://opspilot-web-iota.vercel.app/) returned HTTP 200 and rendered the dashboard |
+| Frontend/API boundary | Production Vercel origin allowed by the Railway API | `OPTIONS /health` with `Origin: https://opspilot-web-iota.vercel.app` returned HTTP 200 and the matching `access-control-allow-origin` header |
 
 ## Not claimed
 
@@ -40,8 +42,8 @@ Last local verification: 2026-09-20.
 - HubSpot, Calendar and Slack remain represented by sandbox adapters. No external CRM record,
   calendar event or Slack post is sent.
 - Docker Compose is defined but is not marked exercised until a Docker-capable host runs the stack.
-- No Vercel deployment, public frontend URL, Gmail OAuth connection, provider message, or customer
-  outcome is claimed yet.
+- Gmail OAuth is not configured in the deployed environment yet. No Google account connection,
+  provider message, recipient delivery, or customer outcome is claimed.
 - Evaluation results are synthetic fixture metrics, not production accuracy or customer results.
 - The current host has no `docker` executable, so the Compose stack has not been started here.
 
