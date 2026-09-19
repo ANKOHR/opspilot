@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 from opspilot_api.main import app
 
@@ -65,3 +67,26 @@ def test_loopback_cors_preflight_is_explicit():
         )
         assert response.status_code == 200
         assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:3000"
+
+
+def test_gmail_sync_forwards_targeted_query_to_worker(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeSyncJob:
+        def send(self, payload):
+            captured.update(payload)
+            return SimpleNamespace(message_id="job-test-1")
+
+    monkeypatch.setattr("opspilot_api.jobs.sync_gmail_job", FakeSyncJob())
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/integrations/gmail/sync",
+            params={"query": 'subject:"OpsPilot verification"', "max_results": 1},
+            headers={"X-Organization-ID": "demo-org"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "queued", "job_id": "job-test-1"}
+    assert captured["query"] == 'subject:"OpsPilot verification"'
+    assert captured["max_results"] == 1
