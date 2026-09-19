@@ -1,7 +1,6 @@
 """Create the initial OpsPilot schema."""
 
 from alembic import op
-
 from opspilot_api import models  # noqa: F401
 from opspilot_api.database import Base
 

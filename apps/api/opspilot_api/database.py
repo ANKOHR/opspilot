@@ -6,7 +6,23 @@ from collections.abc import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./opspilot.db")
+
+def normalize_database_url(url: str) -> str:
+    """Use the installed psycopg3 driver for PostgreSQL URLs.
+
+    Railway and other managed Postgres providers commonly expose the generic
+    ``postgresql://`` scheme. SQLAlchemy maps that scheme to psycopg2 unless
+    the driver is explicit, while OpsPilot deliberately depends on psycopg3.
+    """
+
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url.removeprefix("postgresql://")
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url.removeprefix("postgres://")
+    return url
+
+
+DATABASE_URL = normalize_database_url(os.getenv("DATABASE_URL", "sqlite:///./opspilot.db"))
 
 
 class Base(DeclarativeBase):
