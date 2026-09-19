@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import asynccontextmanager
-from urllib.parse import urlencode
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +30,7 @@ from .schemas import (
 from .security import get_context, require_write
 
 repository = Repository()
+logger = logging.getLogger(__name__)
 
 
 def tools_for_organisation(organisation_id: str):
@@ -107,6 +108,9 @@ def gmail_oauth_start(
     organisation_id: str = Query(default="demo-org", min_length=1, max_length=80),
     user_id: str = Query(default="demo-operator", min_length=1, max_length=120),
 ) -> RedirectResponse:
+    if os.getenv("APP_ENV", "development").lower() == "production":
+        organisation_id = os.getenv("DEMO_ORG_ID", "demo-org")
+        user_id = os.getenv("DEMO_OAUTH_USER_ID", "demo-operator")
     try:
         state = create_oauth_state(organisation_id, user_id)
         return RedirectResponse(authorization_url(state), status_code=307)
@@ -145,11 +149,9 @@ def gmail_oauth_callback(
             connection["id"],
             {"provider": "gmail", "external_account": connection["external_account"]},
         )
-    except (GmailConfigurationError, ValueError, TypeError) as exc:
-        return RedirectResponse(
-            f"{web_url}/integrations?{urlencode({'gmail': 'error', 'reason': str(exc)[:120]})}",
-            status_code=303,
-        )
+    except (GmailConfigurationError, ValueError, TypeError):
+        logger.exception("Gmail OAuth callback failed")
+        return RedirectResponse(f"{web_url}/integrations?gmail=error", status_code=303)
     return RedirectResponse(f"{web_url}/integrations?gmail=connected", status_code=303)
 
 

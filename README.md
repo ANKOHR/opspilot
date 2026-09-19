@@ -89,6 +89,7 @@ The verification record and the list of deliberately unclaimed capabilities are 
 [`docs/architecture.mmd`](docs/architecture.mmd).
 The external publication and deployment gates are tracked in
 [`docs/release-checklist.md`](docs/release-checklist.md).
+The Railway and Vercel runbook is in [`docs/deployment.md`](docs/deployment.md).
 
 Run the production-shaped stack:
 
