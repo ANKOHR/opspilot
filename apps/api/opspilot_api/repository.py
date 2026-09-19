@@ -12,7 +12,9 @@ from .database import SessionLocal
 from .models import (
     ApprovalModel,
     AuditLogModel,
+    CredentialModel,
     EventModel,
+    IntegrationModel,
     OrganizationMemberModel,
     OrganizationModel,
     RunModel,
@@ -473,6 +475,88 @@ class Repository:
                 )
             )
             db.commit()
+
+    def upsert_gmail_connection(
+        self,
+        organisation_id: str,
+        external_account: str,
+        scopes: list[str],
+        encrypted_refresh_token: str,
+    ) -> dict[str, Any]:
+        integration_id = f"gmail_{organisation_id}"
+        credential_id = f"credential_{integration_id}"
+        with self.session_factory() as db:
+            integration = db.get(IntegrationModel, integration_id)
+            if integration is None:
+                integration = IntegrationModel(
+                    id=integration_id,
+                    organisation_id=organisation_id,
+                    provider="gmail",
+                )
+                db.add(integration)
+            integration.status = "connected"
+            integration.scopes = scopes
+            integration.external_account = external_account
+
+            credential = db.get(CredentialModel, credential_id)
+            if credential is None:
+                credential = CredentialModel(
+                    id=credential_id,
+                    integration_id=integration_id,
+                    encrypted_refresh_token=encrypted_refresh_token,
+                )
+                db.add(credential)
+            else:
+                credential.encrypted_refresh_token = encrypted_refresh_token
+                credential.rotated_at = datetime.now(UTC)
+            db.commit()
+            return self.integration_dict(integration)
+
+    def gmail_connection(
+        self, organisation_id: str, include_secret: bool = False
+    ) -> dict[str, Any] | None:
+        with self.session_factory() as db:
+            integration = db.scalar(
+                select(IntegrationModel).where(
+                    IntegrationModel.organisation_id == organisation_id,
+                    IntegrationModel.provider == "gmail",
+                )
+            )
+            if integration is None:
+                return None
+            result = self.integration_dict(integration)
+            if include_secret:
+                credential = db.scalar(
+                    select(CredentialModel).where(
+                        CredentialModel.integration_id == integration.id,
+                    )
+                )
+                result["encrypted_refresh_token"] = (
+                    credential.encrypted_refresh_token if credential else None
+                )
+            return result
+
+    def integration_dict(self, row: IntegrationModel) -> dict[str, Any]:
+        return {
+            "id": row.id,
+            "provider": row.provider,
+            "status": row.status,
+            "scopes": row.scopes or [],
+            "external_account": row.external_account,
+            "last_sync_at": as_iso(row.last_sync_at),
+        }
+
+    def mark_gmail_sync(self, organisation_id: str) -> None:
+        with self.session_factory() as db:
+            integration = db.scalar(
+                select(IntegrationModel).where(
+                    IntegrationModel.organisation_id == organisation_id,
+                    IntegrationModel.provider == "gmail",
+                )
+            )
+            if integration:
+                integration.last_sync_at = datetime.now(UTC)
+                db.commit()
 
     def overview(self, organisation_id: str) -> dict[str, Any]:
         with self.session_factory() as db:

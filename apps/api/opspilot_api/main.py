@@ -2,11 +2,22 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from urllib.parse import urlencode
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from .database import init_db
+from .gmail import (
+    GmailConfigurationError,
+    GmailConnector,
+    authorization_url,
+    create_oauth_state,
+    encrypt_refresh_token,
+    exchange_oauth_code,
+    verify_oauth_state,
+)
 from .repository import Repository
 from .runtime import WorkflowRuntime
 from .schemas import (
@@ -19,7 +30,23 @@ from .schemas import (
 from .security import get_context, require_write
 
 repository = Repository()
-runtime = WorkflowRuntime(repository)
+
+
+def tools_for_organisation(organisation_id: str):
+    from .tools import DemoToolRegistry
+
+    connection = repository.gmail_connection(organisation_id, include_secret=True)
+    if not connection:
+        return DemoToolRegistry()
+    encrypted_refresh_token = connection.get("encrypted_refresh_token")
+    if not encrypted_refresh_token:
+        raise GmailConfigurationError("Connected Gmail integration has no stored credential")
+    return DemoToolRegistry(
+        gmail_connector=GmailConnector.from_stored_connection(encrypted_refresh_token)
+    )
+
+
+runtime = WorkflowRuntime(repository, tool_factory=tools_for_organisation)
 
 
 @asynccontextmanager
@@ -54,7 +81,119 @@ app.add_middleware(
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "service": "opspilot-api", "mode": "sandbox"}
+    return {
+        "status": "ok",
+        "service": "opspilot-api",
+        "mode": os.getenv("APP_ENV", "development"),
+    }
+
+
+@app.get("/api/integrations/gmail")
+def gmail_status(context: OrganizationContext = Depends(get_context)) -> dict:
+    connection = repository.gmail_connection(context.organization_id)
+    if connection is None:
+        return {"provider": "gmail", "status": "not_connected", "scopes": []}
+    return {
+        "provider": "gmail",
+        "status": connection["status"],
+        "account": connection["external_account"],
+        "scopes": connection["scopes"],
+        "last_sync_at": connection["last_sync_at"],
+    }
+
+
+@app.get("/api/integrations/gmail/oauth/start")
+def gmail_oauth_start(
+    organisation_id: str = Query(default="demo-org", min_length=1, max_length=80),
+    user_id: str = Query(default="demo-operator", min_length=1, max_length=120),
+) -> RedirectResponse:
+    try:
+        state = create_oauth_state(organisation_id, user_id)
+        return RedirectResponse(authorization_url(state), status_code=307)
+    except GmailConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/integrations/gmail/oauth/callback")
+def gmail_oauth_callback(
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> RedirectResponse:
+    web_url = os.getenv("WEB_APP_URL", "http://localhost:3000").rstrip("/")
+    if error:
+        return RedirectResponse(f"{web_url}/integrations?gmail=denied", status_code=303)
+    if not code or not state:
+        return RedirectResponse(f"{web_url}/integrations?gmail=error", status_code=303)
+    try:
+        identity = verify_oauth_state(state)
+        credentials = exchange_oauth_code(code)
+        connector = GmailConnector.from_credentials(credentials)
+        profile = connector.get_profile()
+        encrypted = encrypt_refresh_token(str(credentials.refresh_token))
+        connection = repository.upsert_gmail_connection(
+            identity["organisation_id"],
+            str(profile.get("emailAddress", "unknown")),
+            list(credentials.scopes or []),
+            encrypted,
+        )
+        repository.add_audit(
+            identity["organisation_id"],
+            identity["user_id"],
+            "integration.connected",
+            "integration",
+            connection["id"],
+            {"provider": "gmail", "external_account": connection["external_account"]},
+        )
+    except (GmailConfigurationError, ValueError, TypeError) as exc:
+        return RedirectResponse(
+            f"{web_url}/integrations?{urlencode({'gmail': 'error', 'reason': str(exc)[:120]})}",
+            status_code=303,
+        )
+    return RedirectResponse(f"{web_url}/integrations?gmail=connected", status_code=303)
+
+
+@app.get("/api/integrations/gmail/messages")
+def gmail_messages(
+    query: str = Query(default="", max_length=500),
+    max_results: int = Query(default=20, ge=1, le=50),
+    context: OrganizationContext = Depends(get_context),
+) -> dict:
+    try:
+        tools = tools_for_organisation(context.organization_id)
+        return tools.execute(
+            "gmail.search", {"query": query, "max_results": max_results}, {"gmail.search"}
+        )
+    except GmailConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=409, detail="Gmail is not connected") from exc
+
+
+@app.post("/api/integrations/gmail/sync")
+def gmail_sync(context: OrganizationContext = Depends(get_context)) -> dict:
+    require_write(context)
+    try:
+        from .jobs import sync_gmail_job
+
+        message = sync_gmail_job.send(
+            {
+                "organisation_id": context.organization_id,
+                "actor": context.user_id,
+                "query": "-label:processed",
+                "max_results": 20,
+            }
+        )
+        repository.add_audit(
+            context.organization_id,
+            context.user_id,
+            "gmail.sync.queued",
+            "integration",
+            f"gmail_{context.organization_id}",
+        )
+        return {"status": "queued", "job_id": message.message_id}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Unable to queue Gmail sync: {exc}") from exc
 
 
 @app.get("/api/overview", response_model=OverviewView)

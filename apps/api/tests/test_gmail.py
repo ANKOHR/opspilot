@@ -1,0 +1,136 @@
+from __future__ import annotations
+
+import base64
+
+import pytest
+from cryptography.fernet import Fernet
+from opspilot_api.gmail import (
+    GmailConfigurationError,
+    create_oauth_state,
+    decrypt_refresh_token,
+    encrypt_refresh_token,
+    normalize_message,
+    verify_oauth_state,
+)
+from opspilot_api.schemas import ApprovalStatus, EventIngestRequest
+from opspilot_api.tools import DemoToolRegistry
+
+
+class FakeGmailConnector:
+    def __init__(self) -> None:
+        self.drafts: list[dict] = []
+        self.sent: list[dict] = []
+
+    def search(self, query: str, max_results: int) -> list[dict]:
+        return [{"id": "msg_1", "query": query, "max_results": max_results}]
+
+    def read(self, message_id: str) -> dict:
+        return {"id": message_id, "body": "hello"}
+
+    def create_draft(self, **arguments: str | None) -> dict:
+        draft = {"draft_id": "gmail_draft_1", "status": "created", "external": True, **arguments}
+        self.drafts.append(draft)
+        return draft
+
+    def send(self, **arguments: str | None) -> dict:
+        self.sent.append(arguments)
+        return {
+            "message_id": "gmail_message_1",
+            "status": "sent",
+            "provider": "gmail",
+            "external": True,
+            "sandbox": False,
+            "confirmed": True,
+        }
+
+
+def test_oauth_state_is_signed_and_scoped(monkeypatch):
+    monkeypatch.setenv("APP_SECRET", "test-app-secret")
+    state = create_oauth_state("org-a", "user-a")
+
+    assert verify_oauth_state(state) == {"organisation_id": "org-a", "user_id": "user-a"}
+    with pytest.raises(GmailConfigurationError, match="invalid or expired"):
+        verify_oauth_state(state + "tampered")
+
+
+def test_oauth_state_requires_app_secret(monkeypatch):
+    monkeypatch.delenv("APP_SECRET", raising=False)
+    with pytest.raises(GmailConfigurationError, match="APP_SECRET"):
+        create_oauth_state("org-a", "user-a")
+
+
+def test_refresh_tokens_are_encrypted(monkeypatch):
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    encrypted = encrypt_refresh_token("refresh-token")
+
+    assert encrypted != "refresh-token"
+    assert decrypt_refresh_token(encrypted) == "refresh-token"
+
+
+def test_gmail_message_normalization_decodes_nested_plain_text():
+    encoded = base64.urlsafe_b64encode(b"Hello from Gmail").decode().rstrip("=")
+    message = normalize_message(
+        {
+            "id": "msg_1",
+            "threadId": "thread_1",
+            "snippet": "Hello",
+            "payload": {
+                "headers": [
+                    {"name": "From", "value": "alice@example.com"},
+                    {"name": "Subject", "value": "Question"},
+                ],
+                "parts": [{"mimeType": "text/plain", "body": {"data": encoded}}],
+            },
+        }
+    )
+
+    assert message["from"] == "alice@example.com"
+    assert message["subject"] == "Question"
+    assert message["body"] == "Hello from Gmail"
+
+
+def test_live_gmail_tool_is_write_and_approval_gated():
+    connector = FakeGmailConnector()
+    tools = DemoToolRegistry(gmail_connector=connector)
+
+    draft = tools.execute(
+        "gmail.create_draft",
+        {"to": "alice@example.com", "subject": "Hello", "body": "Hi"},
+        {"gmail.create_draft"},
+    )
+    assert draft["external"] is True
+    with pytest.raises(PermissionError, match="requires human approval"):
+        tools.execute("gmail.send", {"draft_id": draft["draft_id"]}, {"gmail.send"})
+
+    sent = tools.execute(
+        "gmail.send", {"draft_id": draft["draft_id"]}, {"gmail.send"}, approved=True
+    )
+    assert sent["status"] == "sent"
+    assert connector.sent == [{"draft_id": "gmail_draft_1"}]
+
+
+def test_live_runtime_records_external_gmail_result(runtime):
+    engine, _repository = runtime
+    connector = FakeGmailConnector()
+    engine.tools = DemoToolRegistry(gmail_connector=connector)
+    request = EventIngestRequest(
+        idempotency_key="live-gmail-runtime",
+        payload={
+            "from": "alice@example.com",
+            "subject": "Invoice automation",
+            "body": "We are a construction company processing 2,000 invoices per month.",
+            "thread_id": "thread_1",
+        },
+    )
+
+    waiting = engine.process_event("demo-org", "tester", request)
+    assert waiting["status"] == "waiting_for_approval"
+    assert waiting["output"]["gmail_draft"]["external"] is True
+    assert waiting["approval_id"]
+
+    completed = engine.decide_approval(
+        "demo-org", "tester", waiting["approval_id"], ApprovalStatus.APPROVED, "Approved live test"
+    )
+    assert completed["output"]["send"]["status"] == "sent"
+    assert completed["output"]["send"]["external"] is True
+    assert any("via Gmail" in item["message"] for item in completed["trace"])
