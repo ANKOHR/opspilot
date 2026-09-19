@@ -509,6 +509,9 @@ class Repository:
             integration.status = "connected"
             integration.scopes = scopes
             integration.external_account = external_account
+            # Materialize a newly-created parent before inserting its credential.
+            # PostgreSQL enforces this foreign key during the flush.
+            db.flush()
 
             credential = db.get(CredentialModel, credential_id)
             if credential is None:
