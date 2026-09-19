@@ -114,6 +114,23 @@ def test_exchange_oauth_code_reuses_state_bound_pkce_verifier(monkeypatch):
     assert captured["autogenerate_code_verifier"] is False
 
 
+def test_gmail_connection_persists_integration_before_credential(runtime):
+    _engine, repository = runtime
+
+    connection = repository.upsert_gmail_connection(
+        "demo-org",
+        "henry.williams85@gmail.com",
+        ["https://www.googleapis.com/auth/gmail.readonly"],
+        "encrypted-refresh-token",
+    )
+
+    assert connection["status"] == "connected"
+    stored = repository.gmail_connection("demo-org", include_secret=True)
+    assert stored is not None
+    assert stored["external_account"] == "henry.williams85@gmail.com"
+    assert stored["encrypted_refresh_token"] == "encrypted-refresh-token"
+
+
 def test_refresh_tokens_are_encrypted(monkeypatch):
     monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", Fernet.generate_key().decode())
     encrypted = encrypt_refresh_token("refresh-token")
