@@ -48,9 +48,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <div className="sidebar-spacer" />
         <div className="sandbox-card">
-          <div className="sandbox-top"><span className="live-dot" /> Sandbox mode</div>
-          <p>All connector actions are simulated. No messages leave this workspace.</p>
-          <Link href="/settings" className="sandbox-link">Review controls <Icon name="arrow" size={14} /></Link>
+          <div className="sandbox-top"><span className="live-dot" /> Safe defaults</div>
+          <p>Sandbox connectors are the default. Approved Gmail actions can use a configured live account.</p>
+          <Link href="/integrations" className="sandbox-link">Review integrations <Icon name="arrow" size={14} /></Link>
         </div>
         <div className="user-card">
           <div className="user-avatar">H</div>
@@ -59,7 +59,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
       <main className="main-content">
-        <div className="topbar"><div className="breadcrumb"><span>Northstar Demo</span><b>/</b><strong>{pageName(pathname)}</strong></div><div className="topbar-actions"><button className="icon-button" aria-label="Search"><Icon name="search" size={18} /></button><button className="icon-button notification" aria-label="Notifications"><Icon name="inbox" size={18} /><span /></button><div className="topbar-separator" /><span className="environment-tag"><i /> Local sandbox</span></div></div>
+        <div className="topbar"><div className="breadcrumb"><span>Northstar Demo</span><b>/</b><strong>{pageName(pathname)}</strong></div><div className="topbar-actions"><button className="icon-button" aria-label="Search"><Icon name="search" size={18} /></button><button className="icon-button notification" aria-label="Notifications"><Icon name="inbox" size={18} /><span /></button><div className="topbar-separator" /><span className="environment-tag"><i /> Safe defaults</span></div></div>
         <div className="page-container">{children}</div>
       </main>
     </div>
@@ -79,4 +79,3 @@ function pageName(pathname: string) {
   if (pathname.startsWith("/analytics")) return "Analytics";
   return "Settings";
 }
-

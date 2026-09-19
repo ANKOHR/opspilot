@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -16,10 +17,21 @@ from .tools import DemoToolRegistry
 
 
 class WorkflowRuntime:
-    def __init__(self, repository: Repository) -> None:
+    def __init__(
+        self,
+        repository: Repository,
+        tools: DemoToolRegistry | None = None,
+        tool_factory: Callable[[str], DemoToolRegistry] | None = None,
+    ) -> None:
         self.repository = repository
         self.llm = DemoLLMProvider()
-        self.tools = DemoToolRegistry()
+        self.tools = tools or DemoToolRegistry()
+        self.tool_factory = tool_factory
+
+    def tools_for_organisation(self, organisation_id: str) -> DemoToolRegistry:
+        if self.tool_factory is not None:
+            return self.tool_factory(organisation_id)
+        return self.tools
 
     def process_event(
         self, organisation_id: str, actor: str, request: EventIngestRequest
@@ -61,6 +73,7 @@ class WorkflowRuntime:
         payload: dict[str, Any],
     ) -> None:
         try:
+            tools = self.tools_for_organisation(organisation_id)
             self.repository.update_run(run_id, current_step="extract")
             self._trace(
                 run_id,
@@ -89,7 +102,7 @@ class WorkflowRuntime:
             )
 
             self.repository.update_run(run_id, current_step="crm_lookup")
-            crm = self.tools.execute(
+            crm = tools.execute(
                 "crm.search_company", {"company_name": lead["company_name"]}, {"crm.search_company"}
             )
             self._trace(
@@ -131,7 +144,7 @@ class WorkflowRuntime:
             )
 
             self.repository.update_run(run_id, current_step="calendar")
-            calendar = self.tools.execute(
+            calendar = tools.execute(
                 "calendar.find_availability", {}, {"calendar.find_availability"}
             )
             self._trace(
@@ -149,10 +162,25 @@ class WorkflowRuntime:
             )
             draft = draft_result.output.model_dump()
             self.repository.add_usage(organisation_id, run_id, draft_result)
+            draft_result_from_provider = tools.execute(
+                "gmail.create_draft",
+                {
+                    "to": lead["contact_email"],
+                    "subject": draft["subject"],
+                    "body": draft["body"],
+                    "thread_id": payload.get("thread_id"),
+                },
+                {"gmail.create_draft"},
+            )
             self.repository.update_run(
                 run_id,
                 current_step="draft",
-                output={"lead": lead, "calendar": calendar, "draft": draft},
+                output={
+                    "lead": lead,
+                    "calendar": calendar,
+                    "draft": draft,
+                    "gmail_draft": draft_result_from_provider,
+                },
             )
             self._trace(
                 run_id,
@@ -160,9 +188,20 @@ class WorkflowRuntime:
                 "Reviewable response draft created",
                 "draft",
                 tool="gmail.create_draft",
-                output={"draft_id": "draft_demo_001", "draft": draft},
+                output={
+                    "draft_id": draft_result_from_provider.get("draft_id"),
+                    "draft": draft,
+                    **draft_result_from_provider,
+                },
                 latency_ms=75,
                 cost_usd=draft_result.cost_usd,
+            )
+
+            live_gmail = bool(draft_result_from_provider.get("external"))
+            approval_summary = (
+                "High-fit inbound enquiry. The proposed reply will be sent through the connected Gmail account."
+                if live_gmail
+                else "High-fit inbound enquiry. The proposed reply includes two meeting slots and will be sent in sandbox mode."
             )
 
             approval_id = self.repository.create_approval(
@@ -170,13 +209,17 @@ class WorkflowRuntime:
                 run_id,
                 "send",
                 "Approve outbound reply to Alice Morgan",
-                "High-fit inbound enquiry. The proposed reply includes two meeting slots and will be sent in sandbox mode.",
+                approval_summary,
                 {
                     "tool": "gmail.send",
+                    "draft_id": draft_result_from_provider.get("draft_id"),
                     "to": lead["contact_email"],
                     "subject": draft["subject"],
                     "body": draft["body"],
-                    "sandbox": True,
+                    "thread_id": payload.get("thread_id"),
+                    "sandbox": not live_gmail,
+                    "external": live_gmail,
+                    "provider": "gmail" if live_gmail else "demo",
                 },
             )
             self.repository.update_run(
@@ -236,6 +279,7 @@ class WorkflowRuntime:
         )
         if status == ApprovalStatus.APPROVED:
             proposed = approval["proposed_action"]
+            tools = self.tools_for_organisation(organisation_id)
             self.repository.update_run(run["id"], status=RunStatus.RUNNING, current_step="send")
             self._trace(
                 run["id"],
@@ -244,17 +288,41 @@ class WorkflowRuntime:
                 "approval",
                 output={"reason": reason},
             )
-            sent = self.tools.execute("gmail.send", proposed, {"gmail.send"}, approved=True)
+            try:
+                sent = tools.execute("gmail.send", proposed, {"gmail.send"}, approved=True)
+            except Exception as exc:
+                self.repository.update_run(
+                    run["id"],
+                    status=RunStatus.FAILED,
+                    current_step="send",
+                    error=str(exc),
+                    completed_at=datetime.now(UTC),
+                )
+                self._trace(
+                    run["id"],
+                    "run.failed",
+                    "Approved external action failed safely",
+                    "send",
+                    status="failed",
+                    tool="gmail.send",
+                    output={"error": str(exc)},
+                )
+                raise
+            send_message = (
+                "Approved email sent via Gmail"
+                if sent.get("external")
+                else "Approved email sent in sandbox"
+            )
             self._trace(
                 run["id"],
                 "tool.completed",
-                "Approved email sent in sandbox",
+                send_message,
                 "send",
                 tool="gmail.send",
                 output=sent,
                 latency_ms=110,
             )
-            deal = self.tools.execute(
+            deal = tools.execute(
                 "crm.create_deal",
                 {"company_name": "Northstar Construction", "fit_score": 94},
                 {"crm.create_deal"},
@@ -268,7 +336,7 @@ class WorkflowRuntime:
                 output=deal,
                 latency_ms=121,
             )
-            task = self.tools.execute(
+            task = tools.execute(
                 "tasks.create_follow_up",
                 {"title": "Follow up with Northstar Construction", "due_in_days": 2},
                 {"tasks.create_follow_up"},

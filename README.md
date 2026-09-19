@@ -4,9 +4,10 @@ Production-shaped AI operations platform for running auditable, human-supervised
 workflows.
 
 OpsPilot connects events to typed workflow steps, permissioned tools and human approval. The local
-showcase is the **Inbound Revenue Agent**: a fictional sales enquiry is extracted, enriched,
-scored, drafted and paused before the outbound step. Approving it continues the run in sandbox
-mode and records the entire trace.
+showcase is the **Inbound Revenue Agent**: a sales enquiry is extracted, enriched, scored, drafted
+and paused before the outbound step. With no live connector configured, approval continues in
+sandbox mode; with the optional Gmail OAuth connector configured, only the approved Gmail action
+uses the connected account and the trace labels that external side effect explicitly.
 
 ```mermaid
 flowchart LR
@@ -22,9 +23,10 @@ flowchart LR
 ```
 
 The default build is intentionally reproducible: it uses a deterministic local LLM provider and
-sandbox connector adapters. It does not make OpenAI, Anthropic, Gmail, HubSpot, Calendar or Slack
-requests. Provider and connector boundaries are present for later configuration, but live API
-credentials, OAuth and external side effects are not part of the local claim.
+sandbox connector adapters. It does not make OpenAI, Anthropic, HubSpot, Calendar or Slack
+requests. Gmail is an optional, explicitly configured OAuth connector with server-side encrypted
+refresh-token storage, read/search, draft creation and approval-gated send. No live provider claim
+is made unless the OAuth connection and provider-side result have been separately verified.
 
 ## What is included
 
@@ -33,6 +35,7 @@ credentials, OAuth and external side effects are not part of the local claim.
   approvals, audit logs and usage records
 - deterministic structured-output provider plus OpenAI/Anthropic provider boundaries
 - tool registry with read/write/external action classes
+- optional Gmail OAuth connector with encrypted credentials, message sync, drafts and approval-gated send
 - approval inbox and replayable runs
 - idempotent event ingestion and bounded worker retries
 - Next.js operations dashboard with Overview, Workflows, Runs, Approvals, Integrations, Analytics
@@ -40,6 +43,7 @@ credentials, OAuth and external side effects are not part of the local claim.
 - three versioned showcase workflow definitions
 - 100-case synthetic evaluation runner
 - Docker Compose for Postgres, Redis, API, worker and web
+- Alembic migration entry point for deployment schema bootstrap
 
 ## Run locally
 
@@ -57,7 +61,9 @@ pnpm dev
 ```
 
 Open `http://localhost:3000`. The dashboard is usable with or without the API; when the API is
-running, **Run showcase** and approval actions call the sandbox endpoints.
+running, **Run showcase** and approval actions call the sandbox endpoints. To configure Gmail,
+copy `.env.example`, create a Google OAuth Web application, set the callback URL, and use
+**Connect Gmail** on the Integrations page. Refresh tokens are never sent to the browser.
 
 Run backend tests and local evals:
 
@@ -70,6 +76,12 @@ Run the full local verification pass:
 
 ```powershell
 .\scripts\verify.ps1
+```
+
+Apply the versioned schema before starting a deployment-shaped API:
+
+```powershell
+.venv\Scripts\python.exe -m opspilot_api.migrate
 ```
 
 The verification record and the list of deliberately unclaimed capabilities are in
@@ -87,5 +99,6 @@ docker compose up --build
 ## Truth boundary
 
 The default project has no live OAuth credentials and no real outbound side effects. The measured
-evaluation is generated synthetic-fixture evidence. Connectors, OAuth, provider calls, deployment
-and customer outcomes require separate configuration and verification.
+evaluation is generated synthetic-fixture evidence. Gmail OAuth, provider calls, deployment and
+customer outcomes require separate configuration and verification. A successful Gmail API response
+confirms provider acceptance of the request; it is not presented as proof of recipient delivery.

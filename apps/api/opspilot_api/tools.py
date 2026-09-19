@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from .gmail import GmailConnector
 from .schemas import ActionClass
 
 
@@ -16,9 +17,10 @@ class ToolSpec:
 
 
 class DemoToolRegistry:
-    """Sandbox connectors. External actions are recorded as simulated side effects."""
+    """Connector registry with a deterministic sandbox and optional live Gmail adapter."""
 
-    def __init__(self) -> None:
+    def __init__(self, gmail_connector: GmailConnector | None = None) -> None:
+        self.gmail_connector = gmail_connector
         self._tools: dict[str, ToolSpec] = {
             "crm.search_company": ToolSpec(
                 "crm.search_company",
@@ -31,6 +33,18 @@ class DemoToolRegistry:
                 "Find candidate meeting slots",
                 ActionClass.READ,
                 self.find_availability,
+            ),
+            "gmail.search": ToolSpec(
+                "gmail.search",
+                "Search messages in the connected Gmail account",
+                ActionClass.READ,
+                self.search_gmail,
+            ),
+            "gmail.read": ToolSpec(
+                "gmail.read",
+                "Read a message from the connected Gmail account",
+                ActionClass.READ,
+                self.read_gmail,
             ),
             "gmail.create_draft": ToolSpec(
                 "gmail.create_draft",
@@ -77,6 +91,10 @@ class DemoToolRegistry:
             raise PermissionError(f"Tool {name} requires human approval before execution")
         return spec.handler(arguments)
 
+    @property
+    def live_gmail(self) -> bool:
+        return self.gmail_connector is not None
+
     def search_company(self, arguments: dict[str, Any]) -> dict[str, Any]:
         return {
             "found": False,
@@ -88,7 +106,36 @@ class DemoToolRegistry:
         return {"slots": ["Tuesday 10:00", "Wednesday 14:00"], "timezone": "Europe/London"}
 
     def create_draft(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        if self.gmail_connector:
+            return self.gmail_connector.create_draft(
+                to=str(arguments["to"]),
+                subject=str(arguments["subject"]),
+                body=str(arguments["body"]),
+                thread_id=arguments.get("thread_id"),
+            )
         return {"draft_id": "draft_demo_001", "status": "created", "sandbox": True}
+
+    def search_gmail(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        if self.gmail_connector:
+            return {
+                "messages": self.gmail_connector.search(
+                    query=str(arguments.get("query", "")),
+                    max_results=int(arguments.get("max_results", 20)),
+                ),
+                "provider": "gmail",
+                "external": True,
+            }
+        return {"messages": [], "provider": "demo", "sandbox": True}
+
+    def read_gmail(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        if self.gmail_connector:
+            return self.gmail_connector.read(str(arguments["message_id"]))
+        return {
+            "id": arguments.get("message_id", "sandbox_message_001"),
+            "body": "Sandbox message content",
+            "provider": "demo",
+            "sandbox": True,
+        }
 
     def create_deal(self, arguments: dict[str, Any]) -> dict[str, Any]:
         return {"deal_id": "deal_demo_001", "status": "created", "sandbox": True}
@@ -97,4 +144,6 @@ class DemoToolRegistry:
         return {"task_id": "task_demo_001", "status": "created", "sandbox": True}
 
     def send_email(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        if self.gmail_connector:
+            return self.gmail_connector.send(**arguments)
         return {"message_id": "sandbox_message_001", "status": "sent_in_sandbox", "sandbox": True}
