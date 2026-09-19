@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import os
 from collections.abc import Callable
 from email.message import EmailMessage
@@ -69,10 +71,27 @@ def verify_oauth_state(state: str, max_age: int = 600) -> dict[str, str]:
     return {"organisation_id": str(value["organisation_id"]), "user_id": str(value["user_id"])}
 
 
+def _code_verifier_for_state(state: str) -> str:
+    """Derive a private, deterministic PKCE verifier from the signed state."""
+    secret = _required_env("APP_SECRET").encode("utf-8")
+    digest = hmac.new(
+        secret,
+        f"{OAUTH_STATE_SALT}:{state}".encode(),
+        hashlib.sha256,
+    ).digest()
+    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+
+
 def authorization_url(state: str) -> str:
-    flow = Flow.from_client_config(_client_config(), scopes=configured_scopes(), state=state)
+    flow = Flow.from_client_config(
+        _client_config(),
+        scopes=configured_scopes(),
+        code_verifier=_code_verifier_for_state(state),
+        autogenerate_code_verifier=False,
+    )
     flow.redirect_uri = _required_env("GOOGLE_OAUTH_REDIRECT_URI")
     url, _ = flow.authorization_url(
+        state=state,
         access_type="offline",
         include_granted_scopes="true",
         prompt="consent",
@@ -80,8 +99,13 @@ def authorization_url(state: str) -> str:
     return url
 
 
-def exchange_oauth_code(code: str) -> Credentials:
-    flow = Flow.from_client_config(_client_config(), scopes=configured_scopes())
+def exchange_oauth_code(code: str, state: str) -> Credentials:
+    flow = Flow.from_client_config(
+        _client_config(),
+        scopes=configured_scopes(),
+        code_verifier=_code_verifier_for_state(state),
+        autogenerate_code_verifier=False,
+    )
     flow.redirect_uri = _required_env("GOOGLE_OAUTH_REDIRECT_URI")
     flow.fetch_token(code=code)
     credentials = flow.credentials
