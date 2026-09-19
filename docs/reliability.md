@@ -10,7 +10,8 @@ The platform is designed around explicit failure boundaries:
 6. Pause at approvals rather than guessing.
 7. Replay from a recorded checkpoint or from the original event.
 
-The included worker uses Dramatiq and Redis with three retries. Gmail sync is queued through the
-same worker boundary and turns each provider message id into an idempotency key. The API's local
-synchronous event path keeps the demo easy to run; a production webhook handler should enqueue
-`process_event_job` and return immediately.
+The included worker uses Dramatiq and Redis with three retries and a bounded default concurrency
+of two processes with four threads each. Gmail sync is queued through the same worker boundary and
+turns each provider message id into an idempotency key. The API's local synchronous event path
+keeps the demo easy to run; a production webhook handler should enqueue `process_event_job` and
+return immediately.

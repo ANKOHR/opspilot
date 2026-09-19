@@ -22,10 +22,11 @@ The API and worker share `DATABASE_URL`, `REDIS_URL`, `APP_ENV`, `APP_SECRET`,
 `GOOGLE_OAUTH_REDIRECT_URI`, `GMAIL_SCOPES` and `WEB_APP_URL`. Postgres and Redis connection
 variables should use Railway service references rather than copied credentials.
 
-Run the versioned schema before the first API deployment is considered healthy:
+Run the versioned schema inside the deployed API container before the first API deployment is
+considered healthy (the SSH key is registered with Railway for the workspace):
 
 ```powershell
-railway run --service api -- python -m opspilot_api.migrate
+railway ssh --service api --identity-file $env:USERPROFILE\.ssh\opspilot_railway -- python -m opspilot_api.migrate
 ```
 
 Generate the public API domain, verify `/health`, then add that URL to Vercel as
