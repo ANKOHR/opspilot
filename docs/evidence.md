@@ -10,7 +10,7 @@ Last local verification: 2026-09-20.
 | Area | Command or observation | Evidence |
 | --- | --- | --- |
 | Backend quality | `\.venv\Scripts\python.exe -m ruff check apps packages` and `ruff format --check` | Clean lint and formatting checks |
-| Backend behaviour | `\.venv\Scripts\python.exe -m pytest -q` | 56 passed; two dependency deprecation warnings; no test failures |
+| Backend behaviour | `\.venv\Scripts\python.exe -m pytest -q` | 60 passed; two dependency deprecation warnings; no test failures |
 | Synthetic evaluation | `\.venv\Scripts\python.exe packages\evals\run_evals.py` | 100 generated cases: 100% intent, fit-band, approval-policy and schema-compliance metrics |
 | Frontend quality | `pnpm lint`, `pnpm typecheck`, `pnpm build` | Production Next.js build completes |
 | API flow | `POST /api/events` then approval decision | Run pauses, approval resumes it, and the final send result is explicitly `sent_in_sandbox` |
@@ -30,20 +30,22 @@ Last local verification: 2026-09-20.
 | Worker footprint | Dramatiq boot log showed two worker processes and a Prometheus fork process | Worker Dockerfile defaults to 2 processes and 4 threads for the trial instance |
 | Vercel frontend | Production deployment `READY` from the monorepo `apps/web` root | [opspilot-web-iota.vercel.app](https://opspilot-web-iota.vercel.app/) returned HTTP 200 and rendered the dashboard |
 | Frontend/API boundary | Production Vercel origin allowed by the Railway API | `OPTIONS /health` with `Origin: https://opspilot-web-iota.vercel.app` returned HTTP 200 and the matching `access-control-allow-origin` header |
+| Gmail OAuth | Production callback completed for an authorized test account | `/api/integrations/gmail` returned `status: connected` with `gmail.readonly`, `gmail.compose` and `gmail.send` scopes; refresh credentials remain server-side |
+| Gmail ingestion | Targeted production sync queued a Dramatiq job for the verification subject | One durable `gmail.email_received` run reached `waiting_for_approval`; the run created a live Gmail draft and recorded `external: true`, `provider: gmail` |
+| Approval-gated Gmail send | Approval was performed from the public OpsPilot approval inbox | The run reached `succeeded`; the provider result returned `status: sent`, `external: true`, `sandbox: false` and `confirmed: true` with a Gmail message identifier; recipient delivery is not claimed |
 
 ## Not claimed
 
 - No OpenAI or Anthropic request is made by the default demo. `DemoLLMProvider` is deterministic;
   the provider classes are explicit integration boundaries and currently require implementation
   and credentials before live calls.
-- Gmail has a real OAuth/API adapter in the repository, but this local verification did not connect
-  a Google account or send a provider message. The default test suite uses a fake connector and no
-  external Gmail side effect.
+- The local test suite uses a fake connector and does not create external Gmail side effects; the
+  deployed verification above covers the separately authorized live Gmail test.
 - HubSpot, Calendar and Slack remain represented by sandbox adapters. No external CRM record,
   calendar event or Slack post is sent.
 - Docker Compose is defined but is not marked exercised until a Docker-capable host runs the stack.
-- Gmail OAuth is not configured in the deployed environment yet. No Google account connection,
-  provider message, recipient delivery, or customer outcome is claimed.
+- No recipient delivery, customer outcome, or production AI accuracy is claimed from the live Gmail
+  self-test. The demo provider remains deterministic and explicitly labelled.
 - Evaluation results are synthetic fixture metrics, not production accuracy or customer results.
 - The current host has no `docker` executable, so the Compose stack has not been started here.
 
