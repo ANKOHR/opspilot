@@ -24,9 +24,9 @@ Last local verification: 2026-09-20.
 | Area | Observation | Evidence |
 | --- | --- | --- |
 | Public repository | `ANKOHR/opspilot` is public on GitHub | [github.com/ANKOHR/opspilot](https://github.com/ANKOHR/opspilot) |
-| Railway API | Production deployment `SUCCESS` at commit `1a6b9bfe21b56a11f79d5d179f58860645309c60` | `https://api-production-35aff.up.railway.app/health` returned `{"status":"ok","service":"opspilot-api","mode":"production"}` |
+| Railway API | Production deployment `SUCCESS` at commit `d749bfe6e93da0ac04eef28dd0a7f91206bfdd47` | `https://api-production-35aff.up.railway.app/health` returned `{"status":"ok","service":"opspilot-api","mode":"production"}` |
 | Database migration | Remote migration used Alembic `PostgresqlImpl` | Revision `0001_initial` observed inside the deployed API container |
-| Railway services | API and worker deployments `SUCCESS`; Postgres and Redis `SUCCESS` | Railway project `opspilot`; worker commit `73fb12df021a200d877f74c68e6e22d9d160b472` |
+| Railway services | API and worker deployments `SUCCESS`; Postgres and Redis `SUCCESS` | Railway project `opspilot`; API and worker commit `d749bfe6e93da0ac04eef28dd0a7f91206bfdd47` |
 | Worker footprint | Dramatiq boot log showed two worker processes and a Prometheus fork process | Worker Dockerfile defaults to 2 processes and 4 threads for the trial instance |
 | Vercel frontend | Production deployment `READY` from the monorepo `apps/web` root | [opspilot-web-iota.vercel.app](https://opspilot-web-iota.vercel.app/) returned HTTP 200 and rendered the dashboard |
 | Frontend/API boundary | Production Vercel origin allowed by the Railway API | `OPTIONS /health` with `Origin: https://opspilot-web-iota.vercel.app` returned HTTP 200 and the matching `access-control-allow-origin` header |
