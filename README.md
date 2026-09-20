@@ -83,7 +83,7 @@ records:
 
 - 60 backend tests passing locally
 - 100 generated synthetic evaluation cases passing across intent, fit-band, approval-policy and schema-compliance metrics
-- production RBAC, idempotency and checkpoint replay checks
+- deployed role enforcement under the demo identity boundary, idempotency and checkpoint replay checks
 - Railway health and service status
 - Vercel HTTP 200 and API CORS verification
 - live Gmail OAuth, targeted ingestion, approval-gated send and provider response
