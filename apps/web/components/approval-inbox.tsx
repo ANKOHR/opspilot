@@ -11,7 +11,7 @@ type ApiApproval = {
   run_id: string;
   title: string;
   summary: string;
-  proposed_action: { to?: string; subject?: string; body?: string };
+  proposed_action: { to?: string; subject?: string; body?: string; external?: boolean };
   status: string;
   created_at: string;
 };
@@ -33,6 +33,7 @@ export function ApprovalInbox() {
             recipient: record.proposed_action.to ?? "sandbox recipient",
             subject: record.proposed_action.subject ?? "Proposed external action",
             body: record.proposed_action.body ?? record.summary,
+            external: record.proposed_action.external === true,
             score: 94,
             created: "live",
             runId: record.run_id,
@@ -44,4 +45,3 @@ export function ApprovalInbox() {
 
   return <>{items.map((approval) => <ApprovalCard key={approval.id} approval={approval} onResolved={(id) => setItems((current) => current.filter((item) => item.id !== id))} />)}</>;
 }
-

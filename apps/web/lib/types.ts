@@ -18,6 +18,7 @@ export type Approval = {
   recipient: string;
   subject: string;
   body: string;
+  external?: boolean;
   score: number;
   created: string;
   runId: string;
@@ -33,4 +34,3 @@ export type Workflow = {
   success: string;
   steps: { id: string; label: string; kind: string; state: "complete" | "approval" | "next" }[];
 };
-
