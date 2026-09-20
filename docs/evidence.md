@@ -33,6 +33,9 @@ Last local verification: 2026-09-20.
 | Gmail OAuth | Production callback completed for an authorized test account | `/api/integrations/gmail` returned `status: connected` with `gmail.readonly`, `gmail.compose` and `gmail.send` scopes; refresh credentials remain server-side |
 | Gmail ingestion | Targeted production sync queued a Dramatiq job for the verification subject | One durable `gmail.email_received` run reached `waiting_for_approval`; the run created a live Gmail draft and recorded `external: true`, `provider: gmail` |
 | Approval-gated Gmail send | Approval was performed from the public OpsPilot approval inbox | The run reached `succeeded`; the provider result returned `status: sent`, `external: true`, `sandbox: false` and `confirmed: true` with a Gmail message identifier; recipient delivery is not claimed |
+| Production idempotency | Replayed the live Gmail event key against `POST /api/events` | The API returned the existing completed run rather than creating or sending a duplicate action |
+| Production checkpoint replay | Replayed the completed run through `POST /api/runs/{run_id}/replay` | A new run recorded `replay_of`, paused at approval, and was rejected before `gmail.send`; no second outbound message was sent |
+| Production RBAC | Viewer attempted `POST /api/demo/inbound-lead` | Railway API returned HTTP 403 with `Viewer role is read-only` |
 
 ## Not claimed
 
