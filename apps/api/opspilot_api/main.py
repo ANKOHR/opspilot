@@ -59,7 +59,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(
     title="OpsPilot API",
-    version="0.1.0",
+    version="1.0.0",
     description="Auditable human-supervised AI operations runtime",
     lifespan=lifespan,
 )

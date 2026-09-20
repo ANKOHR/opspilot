@@ -35,7 +35,7 @@ Last local verification: 2026-09-20.
 | Approval-gated Gmail send | Approval was performed from the public OpsPilot approval inbox | The run reached `succeeded`; the provider result returned `status: sent`, `external: true`, `sandbox: false` and `confirmed: true` with a Gmail message identifier; recipient delivery is not claimed |
 | Production idempotency | Replayed the live Gmail event key against `POST /api/events` | The API returned the existing completed run rather than creating or sending a duplicate action |
 | Production checkpoint replay | Replayed the completed run through `POST /api/runs/{run_id}/replay` | A new run recorded `replay_of`, paused at approval, and was rejected before `gmail.send`; no second outbound message was sent |
-| Production RBAC | Viewer attempted `POST /api/demo/inbound-lead` | Railway API returned HTTP 403 with `Viewer role is read-only` |
+| Deployed role enforcement under the demo identity boundary | Viewer supplied the demo `X-Role: viewer` context and attempted `POST /api/demo/inbound-lead` | Railway API returned HTTP 403 with `Viewer role is read-only`; signed session/JWT authentication is not claimed |
 
 ## Not claimed
 
