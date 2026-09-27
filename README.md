@@ -4,6 +4,13 @@ Deployed AI operations platform for running auditable, human-supervised business
 
 [Production dashboard](https://opspilot-web-iota.vercel.app/) · [API health](https://api-production-35aff.up.railway.app/health) · [Evidence record](docs/evidence.md) · [Release checklist](docs/release-checklist.md)
 
+## 60-second reviewer path
+
+1. Open the [production dashboard](https://opspilot-web-iota.vercel.app/) and inspect the workflow, run, approval and integration surfaces.
+2. Read the [evidence record](docs/evidence.md) for the exact verified behaviour and claim boundaries.
+3. Review [`docs/architecture.mmd`](docs/architecture.mmd) for the runtime topology and approval boundary.
+4. Inspect [CI](https://github.com/ANKOHR/opspilot/actions/workflows/ci.yml): backend tests/evals and frontend typecheck/build run on pushes and pull requests.
+
 OpsPilot is a production-shaped internal platform: events become typed workflow steps, permissioned
 tools and human approval decisions. The public v1.0.0 release is deployed as a Next.js dashboard on
 Vercel and a FastAPI API plus Dramatiq worker, PostgreSQL and Redis services on Railway.
@@ -92,17 +99,19 @@ See [`docs/evidence.md`](docs/evidence.md) for the exact boundaries and reproduc
 
 ## Run locally
 
+From the repository root:
+
 ```powershell
-cd C:\Users\henry\opspilot
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .venv\Scripts\python.exe -m uvicorn opspilot_api.main:app --app-dir apps/api --reload
 ```
 
-In another terminal:
+In another terminal, also from the repository root:
 
 ```powershell
-cd C:\Users\henry\opspilot\apps\web
 pnpm install
-pnpm dev
+pnpm --filter opspilot-web dev
 ```
 
 Open `http://localhost:3000`. The dashboard is usable with or without the API; when the API is
